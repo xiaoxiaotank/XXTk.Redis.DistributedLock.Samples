@@ -73,5 +73,37 @@
             </summary>
             <returns></returns>
         </member>
+        <member name="T:XXTk.Redis.DistributedLock.Api.RedisNewtonsoftSerializer">
+            <summary>
+            Redis对象序列化器
+            </summary>
+            <remarks>refer to StackExchange.Redis.Extensions.Newtonsoft </remarks>
+        </member>
+        <member name="F:XXTk.Redis.DistributedLock.Api.RedisNewtonsoftSerializer.encoding">
+            <summary>
+            Encoding to use to convert string to byte[] and the other way around.
+            </summary>
+            <remarks>
+            StackExchange.Redis uses Encoding.UTF8 to convert strings to bytes,
+            hence we do same here.
+            </remarks>
+        </member>
+        <member name="M:XXTk.Redis.DistributedLock.Api.RedisNewtonsoftSerializer.#ctor">
+            <summary>
+            Initializes a new instance of the <see cref="T:XXTk.Redis.DistributedLock.Api.RedisNewtonsoftSerializer"/> class.
+            </summary>
+        </member>
+        <member name="M:XXTk.Redis.DistributedLock.Api.RedisNewtonsoftSerializer.#ctor(Newtonsoft.Json.JsonSerializerSettings)">
+            <summary>
+            Initializes a new instance of the <see cref="T:XXTk.Redis.DistributedLock.Api.RedisNewtonsoftSerializer"/> class.
+            </summary>
+            <param name="settings">The settings.</param>
+        </member>
+        <member name="M:XXTk.Redis.DistributedLock.Api.RedisNewtonsoftSerializer.Serialize(System.Object)">
+            <inheritdoc/>
+        </member>
+        <member name="M:XXTk.Redis.DistributedLock.Api.RedisNewtonsoftSerializer.Deserialize``1(System.Byte[])">
+            <inheritdoc/>
+        </member>
     </members>
 </doc>

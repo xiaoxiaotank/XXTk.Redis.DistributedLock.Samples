@@ -11,7 +11,6 @@ using RedLockNet.SERedis;
 using RedLockNet.SERedis.Configuration;
 using StackExchange.Redis.Extensions.Core.Abstractions;
 using StackExchange.Redis.Extensions.Core.Configuration;
-using StackExchange.Redis.Extensions.Newtonsoft;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -34,7 +33,7 @@ namespace XXTk.Redis.DistributedLock.Api
         {
             // 请先在 redis.json 中修改为自己的配置
             var redisConfiguration = Configuration.GetSection("Redis").Get<RedisConfiguration>();
-            services.AddStackExchangeRedisExtensions<NewtonsoftSerializer>(redisConfiguration);
+            services.AddStackExchangeRedisExtensions<RedisNewtonsoftSerializer>(redisConfiguration);
             services.AddSingleton<IDistributedLockFactory>(provider =>
             {
                 var redisCacheConnectionpoolManager = provider.GetRequiredService<IRedisCacheConnectionPoolManager>();

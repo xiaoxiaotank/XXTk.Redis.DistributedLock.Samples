@@ -5,7 +5,9 @@ using StackExchange.Redis;
 using StackExchange.Redis.Extensions.Core.Abstractions;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 
@@ -104,27 +106,30 @@ namespace XXTk.Redis.DistributedLock.Api.Controllers
         public async Task<string> DecreaseProductStockInAppClusterV1()
         {
             var lockKey = GetDistributedLockKey(ProductId.ToString());
-            try
+
+            // 使用 SETNX key value 命令加锁
+            if (await _redisDatabase.AddAsync(lockKey, 1, When.NotExists, CommandFlags.DemandMaster))
             {
-                if(await _redisDatabase.AddAsync(lockKey, 1, When.NotExists))
+                try
                 {
                     var stockKey = GetProductStockKey(ProductId);
-                    var currentQuantity = (long)_redisDatabase.Database.StringGet(stockKey);
+                    var currentQuantity = (long)await _redisDatabase.Database.StringGetAsync(stockKey);
                     if (currentQuantity < 1)
                         throw new Exception("库存不足");
 
                     var leftQuantity = currentQuantity - 1;
-                    _redisDatabase.Database.StringSet(stockKey, leftQuantity);
+                    await _redisDatabase.Database.StringSetAsync(stockKey, leftQuantity);
 
                     return $"剩余库存：{leftQuantity}";
                 }
-                else
-                    throw new Exception("获取锁失败");
+                finally
+                {
+                    // 释放锁
+                    await _redisDatabase.Database.KeyDeleteAsync(lockKey, CommandFlags.DemandMaster);
+                }
             }
-            finally
-            {
-                _redisDatabase.Database.KeyDelete(lockKey);
-            }
+            else
+                throw new Exception("获取锁失败");
         }
 
         /// <summary>
@@ -135,27 +140,31 @@ namespace XXTk.Redis.DistributedLock.Api.Controllers
         public async Task<string> DecreaseProductStockInAppClusterV2()
         {
             var lockKey = GetDistributedLockKey(ProductId.ToString());
-            try
+            var expiresIn = TimeSpan.FromSeconds(30);
+
+            // 使用 SET key value EX seconds NX 命令加锁，并设置过期时间
+            if (await _redisDatabase.AddAsync(lockKey, 1, expiresIn, When.NotExists, CommandFlags.DemandMaster))
             {
-                if (await _redisDatabase.AddAsync(lockKey, 1, TimeSpan.FromSeconds(30), When.NotExists))
+                try
                 {
                     var stockKey = GetProductStockKey(ProductId);
-                    var currentQuantity = (long)_redisDatabase.Database.StringGet(stockKey);
+                    var currentQuantity = (long)await _redisDatabase.Database.StringGetAsync(stockKey);
                     if (currentQuantity < 1)
                         throw new Exception("库存不足");
 
                     var leftQuantity = currentQuantity - 1;
-                    _redisDatabase.Database.StringSet(stockKey, leftQuantity);
+                    await _redisDatabase.Database.StringSetAsync(stockKey, leftQuantity);
 
                     return $"剩余库存：{leftQuantity}";
                 }
-                else
-                    throw new Exception("获取锁失败");
+                finally
+                {
+                    // 释放锁
+                    await _redisDatabase.Database.KeyDeleteAsync(lockKey, CommandFlags.DemandMaster);
+                }
             }
-            finally
-            {
-                _redisDatabase.Database.KeyDelete(lockKey);
-            }
+            else
+                throw new Exception("获取锁失败");
         }
 
         /// <summary>
@@ -167,30 +176,34 @@ namespace XXTk.Redis.DistributedLock.Api.Controllers
         {
             var lockKey = GetDistributedLockKey(ProductId.ToString());
             var resourceId = Guid.NewGuid().ToString();
-            try
+            var expiresIn = TimeSpan.FromSeconds(30);
+
+            // 使用 SET key value EX seconds NX 命令加锁，设置过期时间，并将值设置为业务Id
+            if (await _redisDatabase.AddAsync(lockKey, resourceId, expiresIn, When.NotExists, CommandFlags.DemandMaster))
             {
-                if (await _redisDatabase.AddAsync(lockKey, resourceId, TimeSpan.FromSeconds(30), When.NotExists))
+                try
                 {
                     var stockKey = GetProductStockKey(ProductId);
-                    var currentQuantity = (long)_redisDatabase.Database.StringGet(stockKey);
+                    var currentQuantity = (long)await _redisDatabase.Database.StringGetAsync(stockKey);
                     if (currentQuantity < 1)
                         throw new Exception("库存不足");
 
                     var leftQuantity = currentQuantity - 1;
-                    _redisDatabase.Database.StringSet(stockKey, leftQuantity);
+                    await _redisDatabase.Database.StringSetAsync(stockKey, leftQuantity);
 
                     return $"剩余库存：{leftQuantity}";
                 }
-                else
-                    throw new Exception("获取锁失败");
-            }
-            finally
-            {
-                if(await _redisDatabase.GetAsync<string>(lockKey) == resourceId)
+                finally
                 {
-                    _redisDatabase.Database.KeyDelete(lockKey);
+                    // 释放锁
+                    if (await _redisDatabase.GetAsync<string>(lockKey) == resourceId)
+                    {
+                        _redisDatabase.Database.KeyDelete(lockKey, CommandFlags.DemandMaster);
+                    }
                 }
             }
+            else
+                throw new Exception("获取锁失败");
         }
 
         /// <summary>
@@ -202,34 +215,40 @@ namespace XXTk.Redis.DistributedLock.Api.Controllers
         {
             var lockKey = GetDistributedLockKey(ProductId.ToString());
             var resourceId = Guid.NewGuid().ToString();
-            try
+            var expiresIn = TimeSpan.FromSeconds(3000);
+
+            // 使用 SET key value EX seconds NX 命令加锁，设置过期时间，并将值设置为业务Id
+            if (await _redisDatabase.Database.StringSetAsync(lockKey, resourceId, expiresIn, When.NotExists, CommandFlags.DemandMaster))
             {
-                if (await _redisDatabase.AddAsync(lockKey, resourceId, TimeSpan.FromSeconds(30), When.NotExists))
+                try
                 {
                     var stockKey = GetProductStockKey(ProductId);
-                    var currentQuantity = (long)_redisDatabase.Database.StringGet(stockKey);
+                    var currentQuantity = (long)await _redisDatabase.Database.StringGetAsync(stockKey);
                     if (currentQuantity < 1)
                         throw new Exception("库存不足");
 
                     var leftQuantity = currentQuantity - 1;
-                    _redisDatabase.Database.StringSet(stockKey, leftQuantity);
+                    await _redisDatabase.Database.StringSetAsync(stockKey, leftQuantity);
 
                     return $"剩余库存：{leftQuantity}";
                 }
-                else
-                    throw new Exception("获取锁失败");
-            }
-            finally
-            {
-                await _redisDatabase.Database.ScriptEvaluateAsync(@"
-                    if redis.call('get', KEYS[1]) == ARGV[1] then
+                finally
+                {
+                    // 释放锁，使用lua脚本实现操作的原子性
+                    var result = await _redisDatabase.Database.ScriptEvaluateAsync(@"
+                        if redis.call('get', KEYS[1]) == ARGV[1] then
     	                    return redis.call('del', KEYS[1])
                         else
-    	                    return 0
+    	                    return 20
                         end",
-                keys: new RedisKey[] { lockKey },
-                values: new RedisValue[] { resourceId });
+                     keys: new RedisKey[] { lockKey },
+                     values: new RedisValue[] { resourceId },
+                     CommandFlags.DemandMaster);
+
+                }
             }
+            else
+                throw new Exception("获取锁失败");
         }
 
         /// <summary>
@@ -242,47 +261,50 @@ namespace XXTk.Redis.DistributedLock.Api.Controllers
             var lockKey = GetDistributedLockKey(ProductId.ToString());
             var resourceId = Guid.NewGuid().ToString();
             var expiresIn = TimeSpan.FromSeconds(30);
-            try
+
+            // 使用 SET key value EX seconds NX 命令加锁，设置过期时间，并将值设置为业务Id
+            if (await _redisDatabase.AddAsync(lockKey, resourceId, expiresIn, When.NotExists, CommandFlags.DemandMaster))
             {
-                if (await _redisDatabase.AddAsync(lockKey, resourceId, expiresIn, When.NotExists))
+                try
                 {
-                    var timer = new Timer()
-                    {
-                        Interval = expiresIn.TotalMilliseconds / 3,
-                        Enabled = true,
-                        AutoReset = true
-                    };
-                    timer.Elapsed += Timer_Elapsed;
+                    // 启动定时器，定时延长key的过期时间
+                    var interval = expiresIn.TotalMilliseconds / 2;
+                    var timer = new System.Threading.Timer(
+                        callback: state => { ExtendLockLifetime(); },
+                        state: null,
+                        dueTime: (int)interval,
+                        period: (int)interval);
 
                     var stockKey = GetProductStockKey(ProductId);
-                    var currentQuantity = (long)_redisDatabase.Database.StringGet(stockKey);
+                    var currentQuantity = (long)await _redisDatabase.Database.StringGetAsync(stockKey);
                     if (currentQuantity < 1)
                         throw new Exception("库存不足");
 
                     var leftQuantity = currentQuantity - 1;
-                    _redisDatabase.Database.StringSet(stockKey, leftQuantity);
+                    await _redisDatabase.Database.StringSetAsync(stockKey, leftQuantity);
 
                     return $"剩余库存：{leftQuantity}";
                 }
-                else
-                    throw new Exception("获取锁失败");
-            }
-            finally
-            {
-                await _redisDatabase.Database.ScriptEvaluateAsync(@"
-                    if redis.call('get', KEYS[1]) == ARGV[1] then
+                finally
+                {
+                    // 释放锁，使用lua脚本实现操作的原子性
+                    await _redisDatabase.Database.ScriptEvaluateAsync(@"
+                        if redis.call('get', KEYS[1]) == ARGV[1] then
     	                    return redis.call('del', KEYS[1])
                         else
     	                    return 0
                         end",
-                keys: new RedisKey[] { lockKey },
-                values: new RedisValue[] { resourceId });
+                     keys: new RedisKey[] { lockKey },
+                     values: new RedisValue[] { resourceId });
+                }
             }
+            else
+                throw new Exception("获取锁失败");
         }
 
-        private void Timer_Elapsed(object sender, ElapsedEventArgs e)
+        private void ExtendLockLifetime()
         {
-            
+
         }
 
         /// <summary>
@@ -292,22 +314,24 @@ namespace XXTk.Redis.DistributedLock.Api.Controllers
         [HttpPost("DecreaseProductStockInAppClusterWithRedLock")]
         public async Task<string> DecreaseProductStockInAppClusterWithRedLock()
         {
+            // 锁的过期时间为30s，等待获取锁的时间为20s，如果没有获取到锁，则等待1秒钟后再次尝试获取
             using var redLock = await _distributedLockFactory.CreateLockAsync(
                 resource: ProductId.ToString(),
                 expiryTime: TimeSpan.FromSeconds(30),
-                waitTime: TimeSpan.FromSeconds(30),
+                waitTime: TimeSpan.FromSeconds(20),
                 retryTime: TimeSpan.FromSeconds(1)
             );
 
+            // 确认是否已获取到锁
             if (redLock.IsAcquired)
             {
                 var stockKey = GetProductStockKey(ProductId);
-                var currentQuantity = (long)_redisDatabase.Database.StringGet(stockKey);
+                var currentQuantity = (long)await _redisDatabase.Database.StringGetAsync(stockKey);
                 if (currentQuantity < 1)
                     throw new Exception("库存不足");
 
                 var leftQuantity = currentQuantity - 1;
-                _redisDatabase.Database.StringSet(stockKey, leftQuantity);
+                await _redisDatabase.Database.StringSetAsync(stockKey, leftQuantity);
 
                 return $"剩余库存：{leftQuantity}";
             }
