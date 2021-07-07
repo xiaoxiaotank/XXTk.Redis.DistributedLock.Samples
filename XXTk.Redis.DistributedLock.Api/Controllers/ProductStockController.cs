@@ -270,7 +270,7 @@ namespace XXTk.Redis.DistributedLock.Api.Controllers
                     // 启动定时器，定时延长key的过期时间
                     var interval = expiresIn.TotalMilliseconds / 2;
                     var timer = new System.Threading.Timer(
-                        callback: state => { ExtendLockLifetime(); },
+                        callback: state => ExtendLockLifetime(lockKey, resourceId, expiresIn),
                         state: null,
                         dueTime: (int)interval,
                         period: (int)interval);
@@ -282,6 +282,10 @@ namespace XXTk.Redis.DistributedLock.Api.Controllers
 
                     var leftQuantity = currentQuantity - 1;
                     await _redisDatabase.Database.StringSetAsync(stockKey, leftQuantity);
+
+                    timer.Change(Timeout.Infinite, Timeout.Infinite);
+                    timer.Dispose();
+                    timer = null;
 
                     return $"剩余库存：{leftQuantity}";
                 }
@@ -295,16 +299,29 @@ namespace XXTk.Redis.DistributedLock.Api.Controllers
     	                    return 0
                         end",
                      keys: new RedisKey[] { lockKey },
-                     values: new RedisValue[] { resourceId });
+                     values: new RedisValue[] { resourceId },
+                     CommandFlags.DemandMaster);
                 }
             }
             else
                 throw new Exception("获取锁失败");
         }
 
-        private void ExtendLockLifetime()
+        private void ExtendLockLifetime(string lockKey, string resourceId, TimeSpan expiresIn)
         {
-
+            _redisDatabase.Database.ScriptEvaluate(@"
+                local currentVal = redis.call('get', KEYS[1])
+                if (currentVal == false) then
+	                return redis.call('set', KEYS[1], ARGV[1], 'PX', ARGV[2]) and 1 or 0
+                elseif (currentVal == ARGV[1]) then
+	                return redis.call('pexpire', KEYS[1], ARGV[2])
+                else
+	                return -1
+                end
+            ",
+            keys: new RedisKey[] { lockKey },
+            values: new RedisValue[] { resourceId, (long)expiresIn.TotalMilliseconds },
+            CommandFlags.DemandMaster);
         }
 
         /// <summary>
